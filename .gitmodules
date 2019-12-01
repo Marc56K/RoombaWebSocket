@@ -1,0 +1,3 @@
+[submodule "RaspberryPi/RF24WebSocket/websocketpp"]
+	path = RaspberryPi/RF24WebSocket/websocketpp
+	url = https://github.com/zaphoyd/websocketpp.git
