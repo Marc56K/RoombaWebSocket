@@ -116,7 +116,7 @@ void keepAwake()
   {
     Roomba.write(128);  //Start -> Passive mode
     
-    if (!isCharging())
+    if (isCharging())
     {
       lastKeepAwake = now;
       Serial.println("keep awake");
