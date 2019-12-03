@@ -94,6 +94,8 @@ void setup()
   Roomba.begin(19200);
   Serial.begin(19200);
 
+  delay(1000);
+
   reduceBaudRate();
 
   delay(1000);
