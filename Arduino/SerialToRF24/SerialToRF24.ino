@@ -7,6 +7,8 @@
 int ddPin=5;
 int rxPin=2; //10
 int txPin=9; // 11
+int redLedPin=10;
+int greenLedPin=6;
 SoftwareSerial Roomba(rxPin, txPin);
 
 const byte address[6] = "00001";
@@ -19,8 +21,31 @@ struct Message
   byte data[30];
 };
 
-void reduceBaudRate (void)
+int readByte(unsigned long timeoutInMs)
 {
+    unsigned long start = millis();
+    while (!Roomba.available())
+    {
+      if (millis() - start > timeoutInMs)
+      {
+        Serial.println("timeout");
+        return -1;
+      }
+    }
+
+    int value = Roomba.read();
+    return value;
+}
+
+void reduceBaudRate ()
+{
+  Serial.println("switching baud rate");
+
+  Roomba.end();
+  delay(100);
+  Roomba.begin(19200);
+  delay(1000);
+  
   pinMode(ddPin, OUTPUT);
   digitalWrite(ddPin, HIGH);
   delay(100);
@@ -36,6 +61,8 @@ void reduceBaudRate (void)
       digitalWrite(ddPin, HIGH);
       delay(100);
   }
+
+  Roomba.flush();
 }
 
 int getOIMode()
@@ -43,8 +70,53 @@ int getOIMode()
   Roomba.write(149); // query
   Roomba.write(1);
   Roomba.write(35); // OI mode
-  while (!Roomba.available());
-  return (int)Roomba.read();
+  int mode = readByte(1000);
+  if (mode < 1 || mode > 4)
+  {
+    return -1;
+  }
+  return mode;
+}
+
+bool connect()
+{
+  bool isConnected = false;
+
+  pinMode(redLedPin, OUTPUT);
+  pinMode(greenLedPin, OUTPUT);
+  
+  if (getOIMode() > -1)
+  {
+      isConnected = true;
+  }
+  else
+  {
+    Roomba.write(128);
+    if (getOIMode() > -1)
+    {
+      isConnected = true;
+    }
+  }
+  
+  if (!isConnected)
+  {
+    digitalWrite(redLedPin, HIGH);
+    digitalWrite(greenLedPin, LOW);
+    reduceBaudRate ();
+    delay(1000);
+    Roomba.write(128);
+    isConnected =  getOIMode() > -1;
+
+    if (isConnected)
+    {
+      Serial.println("connected");
+    }
+  }
+
+  digitalWrite(redLedPin, isConnected ? LOW : HIGH);
+  digitalWrite(greenLedPin, isConnected ? HIGH : LOW);
+
+  return isConnected;
 }
 
 bool isCharging()
@@ -53,7 +125,7 @@ bool isCharging()
   Roomba.write(1);
   Roomba.write(34); // OI mode
   while (!Roomba.available());
-  return Roomba.read() != 0;
+  return readByte(1000) > 0;
 }
 
 void printState()
@@ -68,8 +140,9 @@ void printState()
   }
 
   Serial.print(", ");
-  
-  switch (getOIMode())
+
+  int oiMode = getOIMode();
+  switch (oiMode)
   {
     case 1:
       Serial.println("off-mode");
@@ -84,29 +157,22 @@ void printState()
       Serial.println("full-mode");
       break;
     default:
-      Serial.println("unknown-mode");
+      Serial.print("unknown-mode: ");
+      Serial.println(oiMode);
       break;
   }
 }
 
 void setup()
 {
-  Roomba.begin(19200);
   Serial.begin(19200);
 
-  delay(1000);
-
-  reduceBaudRate();
-
-  delay(1000);
-  
   radio.begin();
   radio.openReadingPipe(0, address);
   radio.setPALevel(RF24_PA_MAX);
   radio.startListening();
 
-  Roomba.write(128); // start
-  
+  //Roomba.write(128); // start  
   //Roomba.write(135); // clean
 }
 
@@ -116,11 +182,12 @@ void keepAwake()
   unsigned long now = millis();
   if (lastKeepAwake == 0 || now - lastKeepAwake > 270000) // 4,5 min TODO check if in dock
   {
-    Roomba.write(128);  //Start -> Passive mode
+    lastKeepAwake = now;
     
+    Roomba.write(128);  //Start -> Passive mode
+
     if (isCharging())
     {
-      lastKeepAwake = now;
       Serial.println("keep awake");
       
       delay(500);
@@ -135,6 +202,13 @@ void keepAwake()
 
 void loop()
 {  
+  if (!connect())
+  {
+    lastKeepAwake = 0;
+    Serial.println("not connected");
+    return;
+  }
+  
   keepAwake();
  
   while (radio.available())
