@@ -6,9 +6,12 @@
 
 int ddPin=5;
 int rxPin=2; //10
-int txPin=9; // 11
+int txPin=9; //11
 int redLedPin=10;
 int greenLedPin=6;
+unsigned long lastKeepAwake = 0;
+unsigned long ledsOffUntil = 0;
+
 SoftwareSerial Roomba(rxPin, txPin);
 
 const byte address[6] = "00001";
@@ -20,6 +23,27 @@ struct Message
   byte dataSize;
   byte data[30];
 };
+
+void updateLeds(bool isConnected, bool messageReceived)
+{
+  unsigned long now = millis();
+
+  if (messageReceived && now > ledsOffUntil)
+  {
+    ledsOffUntil = now + 30;
+  }
+  
+  if (now < ledsOffUntil)
+  {
+    digitalWrite(redLedPin, LOW);
+    digitalWrite(greenLedPin, LOW);
+  }
+  else
+  {
+    digitalWrite(redLedPin, isConnected ? LOW : HIGH);
+    digitalWrite(greenLedPin, isConnected ? HIGH : LOW);
+  }
+}
 
 int readByte(unsigned long timeoutInMs)
 {
@@ -84,7 +108,7 @@ bool connect()
 
   pinMode(redLedPin, OUTPUT);
   pinMode(greenLedPin, OUTPUT);
-  
+
   if (getOIMode() > -1)
   {
       isConnected = true;
@@ -97,7 +121,7 @@ bool connect()
       isConnected = true;
     }
   }
-  
+
   if (!isConnected)
   {
     digitalWrite(redLedPin, HIGH);
@@ -113,8 +137,7 @@ bool connect()
     }
   }
 
-  digitalWrite(redLedPin, isConnected ? LOW : HIGH);
-  digitalWrite(greenLedPin, isConnected ? HIGH : LOW);
+  updateLeds(isConnected, false);
 
   return isConnected;
 }
@@ -163,24 +186,10 @@ void printState()
   }
 }
 
-void setup()
-{
-  Serial.begin(19200);
-
-  radio.begin();
-  radio.openReadingPipe(0, address);
-  radio.setPALevel(RF24_PA_MAX);
-  radio.startListening();
-
-  //Roomba.write(128); // start  
-  //Roomba.write(135); // clean
-}
-
-unsigned long lastKeepAwake = 0;
 void keepAwake()
 {
   unsigned long now = millis();
-  if (lastKeepAwake == 0 || now - lastKeepAwake > 270000) // 4,5 min TODO check if in dock
+  if (lastKeepAwake == 0 || now - lastKeepAwake > 120000) // 2 min
   {
     lastKeepAwake = now;
     
@@ -200,6 +209,19 @@ void keepAwake()
   }
 }
 
+void setup()
+{
+  Serial.begin(19200);
+
+  radio.begin();
+  radio.openReadingPipe(0, address);
+  radio.setPALevel(RF24_PA_MAX);
+  radio.startListening();
+
+  //Roomba.write(128); // start  
+  //Roomba.write(135); // clean
+}
+
 void loop()
 {  
   if (!connect())
@@ -216,11 +238,12 @@ void loop()
     Message msg = {};
     radio.read(&msg, sizeof(Message));
     Serial.println(msg.cmd, DEC);
-
     Roomba.write(msg.cmd);
     for (int i = 0; i < msg.dataSize; i++)
     {
       Roomba.write(msg.data[i]);
     }
+
+    updateLeds(true, true);
   }
 }
