@@ -1,10 +1,12 @@
 #include <iostream>
 #include <string>
+#include <algorithm>
+#include <iterator>
+#include <vector>
 #include <unistd.h>
 #include <RF24/nRF24L01.h>
 #include <RF24/RF24.h>
-  
-//#include <server_ws.hpp>
+
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 
@@ -18,9 +20,9 @@ const uint8_t data_pipe[6] = "00001";
 
 struct Message
 {
-  unsigned char cmd;
-  unsigned char dataSize;
-  unsigned char data[30];
+    unsigned char cmd;
+    unsigned char dataSize;
+    unsigned char data[30];
 };
 
 typedef websocketpp::server<websocketpp::config::asio> server;
@@ -36,8 +38,8 @@ bool send(Message& msg)
 {
     if (!radio.write(&msg, sizeof(Message)))
     {
-      std::cout<<"sending failed"<<std::endl;
-      return false;
+        std::cout << "sending failed" << std::endl;
+        return false;
     }
     return true;
 }
@@ -49,39 +51,57 @@ bool sendCommand(unsigned char cmd)
     return send(msg);
 }
 
+std::vector<unsigned char> stringToBytes(const std::string& str)
+{
+    std::vector<unsigned char> result;
+    if (str.size() > 0)
+    {
+        std::size_t current, previous = 0;
+        current = str.find(' ');
+        while (current != std::string::npos)
+        {
+            result.push_back(static_cast<unsigned char>(std::stoi(str.substr(previous, current - previous))));
+            previous = current + 1;
+            current = str.find(' ', previous);
+        }
+        result.push_back(static_cast<unsigned char>(std::stoi(str.substr(previous, current - previous))));
+    }
+    return result;
+}
+
 // Define a callback to handle incoming messages
-void on_message(server* s, websocketpp::connection_hdl hdl, message_ptr msg) 
+void on_message(server* s, websocketpp::connection_hdl hdl, message_ptr msg)
 {
     std::cout << "on_message called with hdl: " << hdl.lock().get()
-              << " and message: " << msg->get_payload()
-              << std::endl;
-              
-    // check for a special command to instruct the server to stop listening so
-    // it can be cleanly exited.
-    if (msg->get_payload() == "stop-listening")
+        << " and message: " << msg->get_payload()
+        << std::endl;
+
+    bool success = false;
+    auto wsMessage = stringToBytes(msg->get_payload());
+    if (wsMessage.size() > 0)
     {
-        s->stop_listening();
-        return;
+        Message msg = {};
+        msg.cmd = wsMessage[0];
+        msg.dataSize = std::min(30, wsMessage.size() - 1);
+        memcpy(msg.data, &wsMessage[1], msg.dataSize);
+
+        std::cout << "Command: " << (int)msg.cmd << " + " << (int)msg.dataSize << "bytes" << std::endl;
+        success = send(msg);
     }
 
-    unsigned char value = static_cast<unsigned char>(std::stoi(msg->get_payload()));
-    std::cout << (int)value << std::endl;
-    sendCommand(value);
-
-    try 
+    try
     {
-        s->send(hdl, msg->get_payload(), msg->get_opcode());
-    } 
-    catch (websocketpp::exception const & e) 
+        s->send(hdl, success ? std::string("success") : std::string("error"), websocketpp::frame::opcode::text);
+    }
+    catch (websocketpp::exception const & e)
     {
-        std::cout << "Echo failed because: "
-                  << "(" << e.what() << ")" << std::endl;
+        std::cout << "Echo failed because: " << "(" << e.what() << ")" << std::endl;
     }
 }
 
 void setup(void)
-{   
-    radio.begin();   
+{
+    radio.begin();
     radio.setRetries(15, 15);
     radio.setDataRate(RF24_1MBPS);
     radio.setPALevel(RF24_PA_MAX);
@@ -89,34 +109,34 @@ void setup(void)
 
     if (!radio.isChipConnected())
     {
-        std::cout<<"chip not connected!"<<std::endl;
+        std::cout << "chip not connected!" << std::endl;
     }
-    
+
     if (radio.failureDetected)
     {
-        std::cout<<"failureDetected"<<std::endl;
+        std::cout << "failureDetected" << std::endl;
     }
-    
+
     radio.printDetails();
 }
 
-int main(int argc, char** argv) 
+int main(int argc, char** argv)
 {
     setup();
     sleep(1);
-    
+
     /*
     sendCommand(CMD_WAKEUP);
     sendCommand(CMD_START);
     sendCommand(CMD_SAFE_MODE);
     sendCommand(CMD_CLEAN);
-    
+
     return 0;
     */
-    
+
     server echo_server;
-    
-    try 
+
+    try
     {
         // Set logging settings
         echo_server.set_access_channels(websocketpp::log::alevel::all);
@@ -126,7 +146,7 @@ int main(int argc, char** argv)
         echo_server.init_asio();
 
         // Register our message handler
-        echo_server.set_message_handler(bind(&on_message,&echo_server,::_1,::_2));
+        echo_server.set_message_handler(bind(&on_message, &echo_server, ::_1, ::_2));
 
         // Listen on port 9002
         echo_server.listen(9002);
@@ -136,9 +156,11 @@ int main(int argc, char** argv)
 
         // Start the ASIO io_service run loop
         echo_server.run();
-    } catch (websocketpp::exception const & e) {
+    }
+    catch (websocketpp::exception const & e) {
         std::cout << e.what() << std::endl;
-    } catch (...) {
+    }
+    catch (...) {
         std::cout << "other exception" << std::endl;
     }
 }
