@@ -32,6 +32,9 @@ void updateLeds(bool isConnected, bool messageReceived)
   {
     ledsOffUntil = now + 30;
   }
+
+  pinMode(redLedPin, OUTPUT);
+  pinMode(greenLedPin, OUTPUT);
   
   if (now < ledsOffUntil)
   {
@@ -106,9 +109,6 @@ bool connect()
 {
   bool isConnected = false;
 
-  pinMode(redLedPin, OUTPUT);
-  pinMode(greenLedPin, OUTPUT);
-
   if (getOIMode() > -1)
   {
       isConnected = true;
@@ -138,7 +138,7 @@ bool connect()
   }
 
   updateLeds(isConnected, false);
-
+  
   return isConnected;
 }
 
@@ -147,7 +147,6 @@ bool isCharging()
   Roomba.write(149); // query
   Roomba.write(1);
   Roomba.write(34); // OI mode
-  while (!Roomba.available());
   return readByte(1000) > 0;
 }
 
@@ -218,12 +217,14 @@ void setup()
   radio.setPALevel(RF24_PA_MAX);
   radio.startListening();
 
+  updateLeds(false, false);
+
   //Roomba.write(128); // start  
   //Roomba.write(135); // clean
 }
 
 void loop()
-{  
+{
   if (!connect())
   {
     lastKeepAwake = 0;
@@ -232,7 +233,7 @@ void loop()
   }
   
   keepAwake();
- 
+
   while (radio.available())
   {
     Message msg = {};
@@ -243,7 +244,7 @@ void loop()
     {
       Roomba.write(msg.data[i]);
     }
-
     updateLeds(true, true);
   }
+  updateLeds(true, false);
 }
