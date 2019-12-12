@@ -82,7 +82,7 @@ void on_message(server* s, websocketpp::connection_hdl hdl, message_ptr msg)
     {
         Message msg = {};
         msg.cmd = wsMessage[0];
-        msg.dataSize = std::min(30, wsMessage.size() - 1);
+        msg.dataSize = std::min(30, static_cast<int>(wsMessage.size() - 1));
         memcpy(msg.data, &wsMessage[1], msg.dataSize);
 
         std::cout << "Command: " << (int)msg.cmd << " + " << (int)msg.dataSize << "bytes" << std::endl;
@@ -124,6 +124,12 @@ int main(int argc, char** argv)
 {
     setup();
     sleep(1);
+
+    if (argc > 1)
+    {
+        // send clean command if application was started with an argument
+        sendCommand(CMD_CLEAN);
+    }
 
     /*
     sendCommand(CMD_WAKEUP);
