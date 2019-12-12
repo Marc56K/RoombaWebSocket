@@ -16,7 +16,7 @@
 #define CMD_CLEAN 135
 
 RF24 radio(RPI_V2_GPIO_P1_22, RPI_V2_GPIO_P1_24);//, BCM2835_SPI_SPEED_8MHZ);
-const uint8_t data_pipe[6] = "00001";
+const uint8_t data_pipe[6] = "RMBAR";
 
 struct Message
 {

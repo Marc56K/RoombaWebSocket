@@ -14,7 +14,7 @@ unsigned long ledsOffUntil = 0;
 
 SoftwareSerial Roomba(rxPin, txPin);
 
-const byte address[6] = "00001";
+const byte address[6] = "RMBAR";
 RF24 radio(7,8);
 
 struct Message
